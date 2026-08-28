@@ -1,0 +1,478 @@
+:root {
+  --primary: #053c5a;
+  --primary-dark: #032b40;
+  --primary-light: #eaf2f6;
+  --primary-mid: #d6e6ee;
+  --text: #1b2733;
+  --muted: #5b6b79;
+  --border: #d7e0e8;
+  --bg: #ffffff;
+  --radius: 10px;
+  --shadow: 0 1px 3px rgba(5, 60, 90, 0.12), 0 4px 12px rgba(5, 60, 90, 0.06);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ------------------------------ Top bar ------------------------------ */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: var(--primary);
+  color: #fff;
+  box-shadow: var(--shadow);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.logo {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+}
+
+.app-title {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+/* ------------------------------ Layout ------------------------------- */
+.container {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 20px 16px 48px;
+}
+
+.card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px;
+  margin-bottom: 18px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.hint {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+/* ------------------------------ Buttons ------------------------------ */
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 8px;
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  color: #fff;
+  transition: background 0.15s ease, transform 0.05s ease;
+}
+
+.btn:hover {
+  background: var(--primary-dark);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn .icon {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.btn.ghost {
+  background: transparent;
+  color: var(--primary);
+  border-color: var(--primary-mid);
+}
+
+.btn.ghost:hover {
+  background: var(--primary-light);
+}
+
+.btn.primary {
+  background: var(--primary);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ------------------------------ Preview ------------------------------ */
+.preview-box {
+  margin-bottom: 14px;
+  border: 1px dashed var(--primary-mid);
+  background: var(--primary-light);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  max-height: 420px;
+}
+
+.preview-box img {
+  max-width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  display: block;
+}
+
+/* ------------------------------ Status ------------------------------- */
+.status {
+  margin: 12px 0 0;
+  color: var(--primary);
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+/* ------------------------------ Tabs --------------------------------- */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.tab {
+  padding: 8px 14px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  border-radius: 999px;
+  transition: all 0.15s ease;
+}
+
+.tab:hover {
+  border-color: var(--primary-mid);
+  color: var(--primary);
+}
+
+.tab.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.tab-body {
+  min-height: 80px;
+}
+
+/* ------------------------------ Table -------------------------------- */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.data-table thead th {
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  font-weight: 600;
+}
+
+.data-table tbody tr:hover td {
+  background: #f7fafc;
+}
+
+.data-table td.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Center all mass-table columns except the Stage column (header + cells). */
+.center-mass th:not(:first-child),
+.center-mass td:not(:first-child) {
+  text-align: center;
+}
+
+/* Center the Conc. column in the result table (header + cells). */
+.center-conc th:nth-child(2),
+.center-conc td:nth-child(2) {
+  text-align: center;
+}
+
+.empty {
+  color: var(--muted);
+  text-align: center;
+  padding: 18px 0;
+  margin: 0;
+}
+
+/* ------------------------------ Message ------------------------------ */
+.message {
+  padding: 14px 16px;
+  border-radius: 8px;
+  font-size: 0.92rem;
+  margin: 0;
+}
+
+.message.error {
+  background: #fdeaea;
+  color: #a11;
+  border: 1px solid #f2c2c2;
+}
+
+.message.info {
+  background: var(--primary-light);
+  color: var(--primary);
+  border: 1px solid var(--primary-mid);
+}
+
+/* ------------------------- Dosage & calculations ---------------------- */
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  margin-bottom: 12px;
+}
+
+.form-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--primary-dark);
+  min-width: 130px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--primary);
+}
+
+.badge.mdi {
+  background: #0b6e99;
+}
+
+.badge.dpi {
+  background: #2a7d54;
+}
+
+.missing-msg {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fdeaea;
+  color: #a11;
+  border: 1px solid #f2c2c2;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.text-input {
+  padding: 8px 10px;
+  border: 1px solid var(--primary-mid);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  width: 130px;
+  color: var(--text);
+}
+
+.text-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.unit-row {
+  gap: 6px;
+}
+
+.unit-btn {
+  padding: 6px 14px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--primary-mid);
+  background: var(--bg);
+  color: var(--primary);
+  border-radius: 8px;
+}
+
+.unit-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.result-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+
+.result-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--primary-dark);
+  font-variant-numeric: tabular-nums;
+}
+
+.calc-note {
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin: 8px 0 0;
+}
+
+.unit {
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+
+/* OCR/analysis timing line */
+.timing {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--primary-light);
+  color: var(--primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+/* Editable concentration inputs in the result table */
+.cell-input {
+  width: 90px;
+  padding: 6px 8px;
+  border: 1px solid var(--primary-mid);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  color: var(--text);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  background: #fff;
+}
+
+.cell-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-light);
+}
+
+/* ------------------------- Calculation cards --------------------------- */
+.calc-card {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fcfdfe;
+}
+
+.card-title {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--primary-dark);
+}
+
+.card-value {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--primary-dark);
+  font-variant-numeric: tabular-nums;
+}
+
+.center-fpd th:not(:first-child),
+.center-fpd td:not(:first-child) {
+  text-align: center;
+}
+
+.value-lod {
+  color: #c01515;
+  font-weight: 700;
+}
+
+@media (max-width: 560px) {
+  .form-label {
+    min-width: 100%;
+  }
+}
+
+/* ------------------------------ Responsive --------------------------- */
+@media (max-width: 560px) {
+  .app-title {
+    font-size: 1.02rem;
+  }
+
+  .btn {
+    flex: 1 1 100%;
+    justify-content: center;
+    padding: 12px;
+  }
+
+  .container {
+    padding: 14px 12px 40px;
+  }
+
+  .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+
+  .tab {
+    white-space: nowrap;
+  }
+}

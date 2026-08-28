@@ -1,0 +1,14 @@
+{
+  "imports": {
+    "ppu-paddle-ocr/web": "https://esm.sh/ppu-paddle-ocr/web"
+  },
+  "tasks": {
+    "start": "deno run --allow-net --allow-read --allow-env server.ts",
+    "test": "deno test --allow-read public/js/",
+    "check": "deno check server.ts"
+  },
+  "deploy": {
+    "org": "devarge",
+    "app": "ngi"
+  }
+}

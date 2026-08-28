@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inhaler Result Analyzer</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "ppu-paddle-ocr/web": "https://esm.sh/ppu-paddle-ocr/web"
+      }
+    }
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <img
+      src="assets/logo.png"
+      alt="Logo"
+      id="logo"
+      class="logo"
+      onerror="this.style.display='none'"
+    />
+    <h1 class="app-title">Inhaler Result Analyzer</h1>
+  </header>
+
+  <main class="container">
+    <!-- Step 1: choose an image -->
+    <section class="card" id="uploadCard">
+      <input type="file" id="fileDisk" accept="image/*" hidden />
+      <input type="file" id="fileCam" accept="image/*" capture="environment" hidden />
+      <p class="hint">Upload or capture a photo of the printed analysis results.</p>
+      <div class="btn-row">
+        <button type="button" class="btn" id="btnDisk" title="Browse from disk">
+          <span class="icon">🖼️</span> Select from Disk
+        </button>
+        <button type="button" class="btn" id="btnCam" title="Capture with camera">
+          <span class="icon">📷</span> Take Photo
+        </button>
+      </div>
+    </section>
+
+    <!-- Step 2: confirm the selected photo -->
+    <section class="card hidden" id="previewCard">
+      <div class="preview-box">
+        <img id="preview" alt="Selected photo" />
+      </div>
+      <div class="btn-row">
+        <button type="button" class="btn ghost" id="btnChange">
+          <span class="icon">&#8635;</span> Change Photo
+        </button>
+        <button type="button" class="btn ghost hidden" id="btnDownload">
+          <span class="icon">&#11015;</span> Download
+        </button>
+        <button type="button" class="btn primary" id="btnAnalyze">
+          <span class="icon">&#128269;</span> Analyze
+        </button>
+      </div>
+      <p class="status hidden" id="status">Working&#8230;</p>
+    </section>
+
+    <!-- Step 3: results -->
+    <section class="card hidden" id="resultsCard">
+      <p class="timing hidden" id="timing"></p>
+      <div class="tabs" id="tabs" role="tablist"></div>
+      <div class="tab-body" id="tabBody">
+        <div class="tab-content" id="tabContent">
+          <p class="empty hidden" id="emptyMsg">No data for this batch yet.</p>
+
+          <!-- Result table (Sample Name / Conc.) -->
+          <table class="data-table center-conc" id="sampleTable">
+            <thead>
+              <tr>
+                <th>Sample Name</th>
+                <th>Conc.</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+
+          <!-- Dosage Form -->
+          <div class="form-row" id="dosageRow">
+            <span class="form-label">Dosage Form</span>
+            <span class="badge hidden" id="dosageBadge"></span>
+          </div>
+
+          <p class="missing-msg hidden" id="missingMsg"></p>
+
+          <!-- Calculations (Flow Rate, Unit, Delivered Dose, Mass table) -->
+          <div class="calc-controls hidden" id="calcControls">
+            <div class="form-row">
+              <label for="flowRate" class="form-label">Flow Rate (L/min)</label>
+              <input type="number" id="flowRate" class="text-input" min="0" step="any"
+                placeholder="e.g. 60" />
+            </div>
+            <div class="form-row">
+              <span class="form-label">Unit</span>
+              <div class="btn-row unit-row" id="unitRow">
+                <button type="button" class="unit-btn active" data-unit="ug">μg</button>
+                <button type="button" class="unit-btn" data-unit="mg">mg</button>
+              </div>
+            </div>
+
+            <!-- Delivered Dose -->
+            <div class="result-line">
+              <span class="form-label">Delivered Dose</span>
+              <span class="result-value" id="deliveredDose"></span>
+            </div>
+
+            <!-- Flow rate required message -->
+            <p class="missing-msg hidden" id="flowMsg">
+              Please enter a flow rate (L/min) to compute the results.
+            </p>
+
+            <!-- Stage / mass table -->
+            <div id="massTableWrap">
+              <table class="data-table center-mass" id="massTable">
+                <thead>
+                  <tr>
+                    <th>Stage</th>
+                    <th>Cut-off Diameter</th>
+                    <th>Mass</th>
+                    <th>Cumulative Mass</th>
+                    <th>Cumulative Mass Percentage</th>
+                  </tr>
+                </thead>
+                <tbody id="massTbody"></tbody>
+              </table>
+            </div>
+
+            <!-- Fine Particle Dose -->
+            <div class="calc-card">
+              <h3 class="card-title">Fine Particle Dose</h3>
+              <table class="data-table center-fpd" id="fpdTable">
+                <thead>
+                  <tr>
+                    <th>Threshold (μm)</th>
+                    <th>FPD</th>
+                    <th>%FPD</th>
+                  </tr>
+                </thead>
+                <tbody id="fpdTbody"></tbody>
+              </table>
+            </div>
+
+            <!-- MMAD -->
+            <div class="calc-card">
+              <h3 class="card-title">Mass Median Aerodynamic Diameter (MMAD)</h3>
+              <p class="card-value" id="mmadValue"></p>
+            </div>
+
+            <!-- GSD -->
+            <div class="calc-card">
+              <h3 class="card-title">Geometric Standard Deviation (GSD)</h3>
+              <p class="card-value" id="gsdValue"></p>
+              <p class="calc-note" id="gsdNote"></p>
+            </div>
+
+            <p class="calc-note" id="calcNote"></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <p class="message hidden" id="message"></p>
+  </main>
+
+  <noscript>
+    <p class="message">This application requires JavaScript to run.</p>
+  </noscript>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
