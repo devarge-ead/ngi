@@ -78,6 +78,23 @@ function setStatus(text) {
   }
 }
 
+/**
+ * Yield to the browser so it can actually paint pending UI updates before a
+ * heavy, synchronous block (the WASM OCR inference) runs.
+ *
+ * Without this, setStatus()/button-label updates are batched by the event
+ * loop and never rendered on screen — the tab appears to "do nothing" for the
+ * whole analysis and results just pop in at the end. The double rAF + macrotask
+ * makes sure a frame has been committed before we continue.
+ */
+function nextPaint() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setTimeout(resolve, 0));
+    });
+  });
+}
+
 function loadPreview(file) {
   if (!file) return;
   const reader = new FileReader();
@@ -181,12 +198,18 @@ els.btnAnalyze.addEventListener("click", async () => {
   const img = els.preview;
   if (!img.src) return;
   els.btnAnalyze.disabled = true;
+  els.btnAnalyze.innerHTML = '<span class="icon spinner"></span> Analyzing…';
   setStatus(
     serviceReady
       ? "Analyzing photo…"
       : "Loading OCR model (preloading started on page load)…",
   );
   showMessage("", "info");
+
+  // Yield to the browser so the "Analyzing…" message is actually painted
+  // before the heavy (blocking) OCR inference below. Without this the status
+  // update is batched and never appears — the UI looks frozen / do-nothing.
+  await nextPaint();
 
   try {
     const t_start = performance.now();
@@ -206,6 +229,7 @@ els.btnAnalyze.addEventListener("click", async () => {
     }
 
     setStatus("Locating analysis table in the photo…");
+    await nextPaint();
     const tables = detectTables(detections);
     if (globalThis.__DEBUG_OCR__) console.log("[OCR] detected tables", tables);
 
@@ -234,12 +258,15 @@ els.btnAnalyze.addEventListener("click", async () => {
     showEl(els.timing, true);
 
     setStatus("Building batch results…");
+    await nextPaint();
     renderTabs();
     setStatus(null);
   } catch (err) {
     console.error(err);
     setStatus(null);
     showMessage(`Analysis failed: ${err && err.message ? err.message : err}`, "error");
+  } finally {
+    els.btnAnalyze.innerHTML = '<span class="icon">&#128269;</span> Analyze';
     els.btnAnalyze.disabled = false;
   }
 });
