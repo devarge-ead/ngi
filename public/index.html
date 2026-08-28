@@ -29,14 +29,10 @@
     <!-- Step 1: choose an image -->
     <section class="card" id="uploadCard">
       <input type="file" id="fileDisk" accept="image/*" hidden />
-      <input type="file" id="fileCam" accept="image/*" capture="environment" hidden />
-      <p class="hint">Upload or capture a photo of the printed analysis results.</p>
+      <p class="hint">Upload a photo of the printed analysis results.</p>
       <div class="btn-row">
         <button type="button" class="btn" id="btnDisk" title="Browse from disk">
           <span class="icon">🖼️</span> Select from Disk
-        </button>
-        <button type="button" class="btn" id="btnCam" title="Capture with camera">
-          <span class="icon">📷</span> Take Photo
         </button>
       </div>
     </section>
@@ -45,6 +41,14 @@
     <section class="card hidden" id="previewCard">
       <div class="preview-box">
         <img id="preview" alt="Selected photo" />
+      </div>
+      <div class="btn-row rotate-row">
+        <button type="button" class="btn ghost rotate-btn" id="btnRotateCcw" title="Rotate counter-clockwise">
+          <span class="icon">↺</span> Rotate CCW
+        </button>
+        <button type="button" class="btn ghost rotate-btn" id="btnRotateCw" title="Rotate clockwise">
+          <span class="icon">↻</span> Rotate CW
+        </button>
       </div>
       <div class="btn-row">
         <button type="button" class="btn ghost" id="btnChange">

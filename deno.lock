@@ -1,0 +1,9 @@
+{
+  "version": "5",
+  "redirects": {
+    "https://esm.sh/ppu-paddle-ocr/web": "https://esm.sh/ppu-paddle-ocr@6.4.3/web"
+  },
+  "remote": {
+    "https://esm.sh/ppu-paddle-ocr@6.4.3/web": "e5673d4db4db5cee7303adf082beb974c91573baae32e4d7b2a3fec331d75b33"
+  }
+}

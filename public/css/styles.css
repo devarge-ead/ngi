@@ -158,6 +158,24 @@ body {
   display: block;
 }
 
+/* Rotate preview buttons */
+.rotate-row {
+  margin: 0 0 14px;
+  justify-content: center;
+}
+
+.rotate-btn {
+  flex: 0 1 auto;
+  min-width: 140px;
+}
+
+@media (max-width: 560px) {
+  .rotate-btn {
+    flex: 1 1 40%;
+    min-width: 0;
+  }
+}
+
 /* ------------------------------ Status ------------------------------- */
 .status {
   margin: 12px 0 0;
@@ -233,6 +251,19 @@ body {
 .center-mass th:not(:first-child),
 .center-mass td:not(:first-child) {
   text-align: center;
+}
+
+/* Keep the wide mass table inside the card: scroll horizontally on small
+   screens instead of overflowing the viewport. */
+#massTableWrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+#massTableWrap .data-table {
+  min-width: 600px;
 }
 
 /* Center the Conc. column in the result table (header + cells). */

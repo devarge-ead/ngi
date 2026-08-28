@@ -28,6 +28,9 @@ export function getService() {
           recognition: `${BASE}/PP-OCRv6_tiny_rec.onnx`,
           charactersDictionary: `${BASE}/ppocrv6_tiny_dict.txt`,
         },
+        recognition: {
+          strategy: "per-box",
+        },
       });
       await service.initialize();
       return service;
@@ -41,7 +44,10 @@ export function getService() {
  */
 export async function runOcr(canvas) {
   const service = await getService();
-  const result = await service.recognize(canvas);
+  const result = await service.recognize(canvas, {
+    minimumAreaThreshold: 500,
+    maxSideLength: 960,
+  });
   return { result, detections: toDetections(result) };
 }
 

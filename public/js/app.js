@@ -6,7 +6,7 @@
  * The raw OCR output and detected-table lists are intentionally NOT shown
  * in the UI.
  */
-import { runOcr } from "./ocr.js";
+import { runOcr, getService } from "./ocr.js";
 import { detectTables } from "./tableParser.js";
 import { buildBatches } from "./batches.js";
 import { normalizeSampleName, detectDosageForm, STAGE_ORDER } from "./samples.js";
@@ -22,10 +22,10 @@ const els = {
   previewCard: $("#previewCard"),
   resultsCard: $("#resultsCard"),
   fileDisk: $("#fileDisk"),
-  fileCam: $("#fileCam"),
   btnDisk: $("#btnDisk"),
-  btnCam: $("#btnCam"),
   preview: $("#preview"),
+  btnRotateCcw: $("#btnRotateCcw"),
+  btnRotateCw: $("#btnRotateCw"),
   btnChange: $("#btnChange"),
   btnDownload: $("#btnDownload"),
   btnAnalyze: $("#btnAnalyze"),
@@ -58,6 +58,7 @@ let currentOrder = [];
 let activeId = null;
 let currentPhotoDataUrl = null;
 const perId = {}; // { [id]: { unit: 'ug'|'mg' } }
+let serviceReady = false; // becomes true once the OCR model is fully loaded
 
 function showEl(el, show) {
   el.classList.toggle("hidden", !show);
@@ -94,15 +95,38 @@ function loadPreview(file) {
 }
 
 els.btnDisk.addEventListener("click", () => els.fileDisk.click());
-els.btnCam.addEventListener("click", () => els.fileCam.click());
 
 els.fileDisk.addEventListener("change", (e) => loadPreview(e.target.files[0]));
-els.fileCam.addEventListener("change", (e) => loadPreview(e.target.files[0]));
+
+/**
+ * Rotate the current preview image by the given angle (multiple of 90 deg).
+ * The result is re-rendered onto a canvas and both the preview <img> and the
+ * shared data URL are updated, so analysis AND download always use the current
+ * (rotated) version.
+ */
+function rotatePreview(deltaDeg) {
+  const img = els.preview;
+  if (!img.src || !img.naturalWidth) return;
+  const deg = ((deltaDeg % 360) + 360) % 360;
+  const swap = deg === 90 || deg === 270;
+  const canvas = document.createElement("canvas");
+  canvas.width = swap ? img.naturalHeight : img.naturalWidth;
+  canvas.height = swap ? img.naturalWidth : img.naturalHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate((deg * Math.PI) / 180);
+  ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+  currentPhotoDataUrl = canvas.toDataURL("image/png");
+  img.src = currentPhotoDataUrl;
+}
+
+els.btnRotateCw.addEventListener("click", () => rotatePreview(90));
+els.btnRotateCcw.addEventListener("click", () => rotatePreview(-90));
 
 els.btnChange.addEventListener("click", () => {
   els.fileDisk.value = "";
-  els.fileCam.value = "";
   currentPhotoDataUrl = null;
+  els.preview.removeAttribute("src");
   showEl(els.btnDownload, false);
   showEl(els.previewCard, false);
   showEl(els.uploadCard, true);
@@ -157,7 +181,11 @@ els.btnAnalyze.addEventListener("click", async () => {
   const img = els.preview;
   if (!img.src) return;
   els.btnAnalyze.disabled = true;
-  setStatus("Initializing OCR engine and loading models…");
+  setStatus(
+    serviceReady
+      ? "Analyzing photo…"
+      : "Loading OCR model (preloading started on page load)…",
+  );
   showMessage("", "info");
 
   try {
@@ -421,4 +449,16 @@ els.unitRow.addEventListener("click", (e) => {
 // Reset results UX on first load.
 showEl(els.resultsCard, false);
 showEl(els.status, false);
+
+// Start loading the OCR model immediately in the background. getService() is a
+// singleton promise, so this warm-up and the later runOcr() call share the same
+// in-flight load/initialize. If the user clicks Analyze before it finishes, the
+// runOcr() await simply waits for this same promise — no double loading.
+getService()
+  .then(() => {
+    serviceReady = true;
+  })
+  .catch((err) => {
+    console.error("Failed to preload OCR model:", err);
+  });
 
