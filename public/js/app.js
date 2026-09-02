@@ -28,6 +28,7 @@ const els = {
   btnRotateCw: $("#btnRotateCw"),
   btnChange: $("#btnChange"),
   btnDownload: $("#btnDownload"),
+  btnDownloadHighlight: $("#btnDownloadHighlight"),
   btnAnalyze: $("#btnAnalyze"),
   status: $("#status"),
   timing: $("#timing"),
@@ -57,6 +58,9 @@ let currentBatches = null; // { [id]: { samples: { canonical: conc } } }
 let currentOrder = [];
 let activeId = null;
 let currentPhotoDataUrl = null;
+// Data URL of the image with every OCR-detected text box painted in a
+// translucent highlight colour (built after each analysis; downloadable only).
+let currentHighlightedDataUrl = null;
 const perId = {}; // { [id]: { unit: 'ug'|'mg' } }
 let serviceReady = false; // becomes true once the OCR model is fully loaded
 
@@ -100,11 +104,13 @@ function loadPreview(file) {
   const reader = new FileReader();
   reader.onload = (e) => {
     currentPhotoDataUrl = e.target.result;
+    currentHighlightedDataUrl = null;
     els.preview.src = currentPhotoDataUrl;
     showEl(els.uploadCard, false);
     showEl(els.previewCard, true);
     showEl(els.resultsCard, false);
     showEl(els.btnDownload, true);
+    showEl(els.btnDownloadHighlight, false);
     setStatus(null);
     els.btnAnalyze.disabled = false;
   };
@@ -143,8 +149,10 @@ els.btnRotateCcw.addEventListener("click", () => rotatePreview(-90));
 els.btnChange.addEventListener("click", () => {
   els.fileDisk.value = "";
   currentPhotoDataUrl = null;
+  currentHighlightedDataUrl = null;
   els.preview.removeAttribute("src");
   showEl(els.btnDownload, false);
+  showEl(els.btnDownloadHighlight, false);
   showEl(els.previewCard, false);
   showEl(els.uploadCard, true);
 });
@@ -159,6 +167,16 @@ els.btnDownload.addEventListener("click", () => {
   a.remove();
 });
 
+els.btnDownloadHighlight.addEventListener("click", () => {
+  if (!currentHighlightedDataUrl) return;
+  const a = document.createElement("a");
+  a.href = currentHighlightedDataUrl;
+  a.download = "ocr-highlighted.png";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+});
+
 /** Draw the current preview image onto a canvas for the OCR model. */
 function imageToCanvas(img) {
   const canvas = document.createElement("canvas");
@@ -167,6 +185,36 @@ function imageToCanvas(img) {
   const ctx = canvas.getContext("2d");
   ctx.drawImage(img, 0, 0);
   return canvas;
+}
+
+// Translucent highlighter-pen colours used to paint every OCR text box.
+// Each detection gets the next colour in sequence (cycling back to the start).
+const HIGHLIGHT_COLORS = [
+  "rgba(255, 213, 0, 0.40)",   // yellow
+  "rgba(0, 199, 255, 0.35)",   // blue
+  "rgba(0, 230, 118, 0.35)",   // green
+  "rgba(255, 82, 82, 0.35)",   // red
+  "rgba(255, 171, 64, 0.40)",  // orange
+  "rgba(171, 71, 188, 0.35)",  // purple
+];
+
+/**
+ * Build a PNG data URL of the given image with every OCR text box painted in a
+ * translucent highlight colour. Boxes come from toDetections() and are already
+ * in the original image pixel space, so they line up with naturalWidth/Height.
+ * The result is only ever downloaded (never shown in the UI).
+ */
+function buildHighlightedImage(img, detections) {
+  const canvas = document.createElement("canvas");
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0);
+  detections.forEach((det, i) => {
+    ctx.fillStyle = HIGHLIGHT_COLORS[i % HIGHLIGHT_COLORS.length];
+    ctx.fillRect(det.x, det.y, det.w, det.h);
+  });
+  return canvas.toDataURL("image/png");
 }
 
 /** Turn a raw batch map (OCR names) into canonical sample keys. */
@@ -227,6 +275,11 @@ els.btnAnalyze.addEventListener("click", async () => {
       showMessage("No text was detected in the image. Try a sharper photo.");
       return;
     }
+
+    // Paint every detected text box on the image so the user can download it
+    // and inspect what the OCR actually saw — useful for failed analyses.
+    currentHighlightedDataUrl = buildHighlightedImage(img, detections);
+    showEl(els.btnDownloadHighlight, true);
 
     setStatus("Locating analysis table in the photo…");
     await nextPaint();

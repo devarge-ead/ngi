@@ -4,7 +4,7 @@
  * WITHOUT any border lines (PaddleOCR only yields text boxes).
  * Run with: deno test public/js/tableParser.test.js
  */
-import { detectTables, toNumber } from "./tableParser.js";
+import { detectTables, toNumber, clusterRows } from "./tableParser.js";
 import { buildBatches } from "./batches.js";
 
 function box(x, y, w, h, text) {
@@ -39,6 +39,81 @@ function makeRows() {
     box(220, 146, 40, 14, "50.1"),
   ];
 }
+Deno.test("clusterRows chains boxes with a gap into one row", () => {
+  const boxes = [
+    box(20, 50, 70, 14, "A"),
+    box(400, 52, 60, 14, "B"), // same row, large horizontal gap
+    box(700, 48, 50, 14, "C"),
+  ];
+  const rows = clusterRows(boxes);
+  if (rows.length !== 1) throw new Error(`Expected 1 row, got ${rows.length}`);
+  if (rows[0].length !== 3) throw new Error(`Expected 3 cells, got ${rows[0].length}`);
+  if (rows[0].map((b) => b.text).join() !== "A,B,C") {
+    throw new Error("row not left-to-right: " + JSON.stringify(rows));
+  }
+  console.log("clusterRows gap-chaining OK");
+});
+
+Deno.test("clusterRows separates vertically stacked rows with overlapping boxes", () => {
+  // Adjacent rows whose boxes overlap vertically (height > line pitch),
+  // the case the old center-clustering struggled with.
+  const boxes = [
+    box(20, 100, 90, 40, "r1a"),
+    box(200, 96, 90, 40, "r1b"),
+    box(20, 130, 90, 40, "r2a"), // overlaps r1a vertically (130 < 140)
+    box(200, 128, 90, 40, "r2b"),
+  ];
+  const rows = clusterRows(boxes);
+  if (rows.length !== 2) throw new Error(`Expected 2 rows, got ${rows.length}`);
+  const texts = rows.map((r) => r.map((b) => b.text).join());
+  if (!texts.includes("r1a,r1b") || !texts.includes("r2a,r2b")) {
+    throw new Error("bad rows: " + JSON.stringify(texts));
+  }
+  console.log("clusterRows stacked rows OK");
+});
+
+Deno.test("clusterRows is unaffected by order of input", () => {
+  const boxes = [
+    box(700, 50, 50, 14, "C"),
+    box(20, 50, 70, 14, "A"),
+    box(400, 52, 60, 14, "B"),
+  ];
+  const rows = clusterRows(boxes);
+  if (rows.length !== 1 || rows[0].map((b) => b.text).join() !== "A,B,C") {
+    throw new Error(JSON.stringify(rows));
+  }
+  console.log("clusterRows input-order independence OK");
+});
+
+
+Deno.test("clusterRows keeps a grazing ray from swallowing a tilted row's tail", () => {
+  // Top row: one horizontal box. Bottom row: tilted upward so that its
+  // tail boxes rise into the top box's horizontal ray — the naive greedy
+  // chaining merged TOP with b4/b5 here.
+  const top = box(100, 100, 80, 20, "TOP"); // cy = 110
+  const bottoms = [
+    box(100, 132, 80, 30, "b1"),
+    box(240, 124, 80, 30, "b2"),
+    box(380, 116, 80, 30, "b3"),
+    box(520, 108, 80, 30, "b4"), // y-span 108-138 contains 110 -> grazed
+    box(660, 100, 80, 30, "b5"), // y-span 100-130 contains 110 -> grazed
+    box(800, 92, 80, 30, "b6"),
+  ];
+  const rows = clusterRows([top, ...bottoms]);
+
+  // TOP must not share a row with any bottom box.
+  const topRow = rows.find((r) => r.some((b) => b.text === "TOP"));
+  if (!topRow) throw new Error("TOP missing from rows");
+  if (topRow.length !== 1) {
+    throw new Error("TOP got merged: " + JSON.stringify(topRow.map((b) => b.text)));
+  }
+
+  // The tilted row should be recovered as (ideally) one row, or at worst
+  // fragments that never contain TOP.
+  const bottomBoxes = rows.flat().filter((b) => b.text !== "TOP");
+  if (bottomBoxes.length !== 6) throw new Error("lost bottom boxes");
+  console.log("clusterRows tilted-row guard OK:", JSON.stringify(rows.map((r) => r.map((b) => b.text))));
+});
 
 Deno.test("detectTables finds the header and groups rows", () => {
   const tables = detectTables(makeRows());
