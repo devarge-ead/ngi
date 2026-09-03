@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Table detection purely from the spatial layout of OCR text boxes.
  * PaddleOCR reports only text bounding boxes (no ruling lines), so a
  * table is recovered by clustering boxes into rows (by vertical center,
@@ -208,6 +208,55 @@ export function clusterRows(boxes, { maxGap = Infinity } = {}) {
   return rows;
 }
 
+/**
+ * Merge horizontally adjacent texts within each row whose boxes are
+ * closer than a height-aware distance threshold.
+ *
+ * For each row independently (left-to-right), the gap between the left
+ * box's right edge and the right box's left edge is compared against
+ * `threshold = max(GAP_RATIO * meanHeight, MIN_MERGE_GAP)`. When the gap
+ * is within the threshold the two boxes are merged into one: their texts
+ * are concatenated and their bounding boxes are united (min x/y, max
+ * right/bottom). Rows are returned in the same shape and order; the
+ * input is not mutated.
+ */
+const GAP_RATIO = 0.6;
+const MIN_MERGE_GAP = 2;
+
+export function mergeNearbyTexts(rows, { gapRatio = GAP_RATIO, minGap = MIN_MERGE_GAP } = {}) {
+  const out = [];
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r];
+    const merged = [];
+    for (let i = 0; i < row.length; i++) {
+      const b = row[i];
+      const prev = merged.length > 0 ? merged[merged.length - 1] : null;
+      if (prev !== null) {
+        const gap = b.x - (prev.x + prev.w);
+        const threshold = Math.max(gapRatio * ((prev.h + b.h) / 2), minGap);
+        if (gap <= threshold) {
+          const x = Math.min(prev.x, b.x);
+          const y = Math.min(prev.y, b.y);
+          const right = Math.max(prev.x + prev.w, b.x + b.w);
+          const bottom = Math.max(prev.y + prev.h, b.y + b.h);
+          merged[merged.length - 1] = {
+            ...prev,
+            text: prev.text + ' ' + b.text,
+            x,
+            y,
+            w: right - x,
+            h: bottom - y,
+          };
+          continue;
+        }
+      }
+      merged.push({ ...b });
+    }
+    out.push(merged);
+  }
+  return out;
+}
+
 /** Wrap a clustered row of boxes into cell-like entries with x/right bounds. */
 function buildCells(row) {
   return row.map((b) => ({
@@ -216,6 +265,166 @@ function buildCells(row) {
     bottom: b.y + b.h,
     text: b.text,
   }));
+}
+
+/**
+ * Keep only the analysis-relevant rows: the first header row (Sample
+ * Name / Sample ID / Conc.) and, below it, only rows whose combined
+ * cell texts contain a sample name we are looking for (AGIZ, BOGAZ,
+ * PRESEPARATOR, STAGE 1-8 — with their known OCR spellings).
+ *
+ * Returns [headerRow, ...matchingSampleRows]; rows above the header and
+ * non-sample rows below it are dropped. If no header row is found the
+ * input is returned unchanged (fallback so column resolution can still
+ * try). The input is not mutated.
+ */
+const SAMPLE_NAME_RE =
+  /AGIZ|AĞIZ|MOUTH|BOGAZ|BOĞAZ|THROAT|PRESEP|STAGE\s*_?\s*0?\s*[1-8]/i;
+
+function rowMatchesSample(row) {
+  let text = "";
+  for (let i = 0; i < row.length; i++) text += row[i].text;
+  return SAMPLE_NAME_RE.test(text);
+}
+
+export function filterSampleRows(rows) {
+  let headerIdx = -1;
+  for (let i = 0; i < rows.length; i++) {
+    if (isHeaderRow(buildCells(rows[i]))) {
+      headerIdx = i;
+      break;
+    }
+  }
+  if (headerIdx === -1) return rows;
+
+  const out = [rows[headerIdx]];
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    if (rowMatchesSample(rows[i])) out.push(rows[i]);
+  }
+  return out;
+}
+
+/**
+ * Repair rows whose adjacent cells were falsely merged by
+ * mergeNearbyTexts (texts of two or more columns detected as one box).
+ *
+ * The true column count is the maximum row length; rows with that many
+ * items are considered solid and are left untouched. For each deficient
+ * row, every cell is compared against the solid rows: cells aligned with
+ * exactly one solid cell are fine, cells aligned with k > 1 solid cells
+ * were merged from k columns and are split at the exact midpoints of the
+ * aligned solid cells' box edges (median across all solid rows).
+ */
+export function fixFalseMerges(rows) {
+  if (!rows.length) return rows;
+  const maxCols = Math.max(...rows.map((r) => r.length));
+  if (maxCols <= 1) return rows;
+  if (rows.every((r) => r.length === maxCols)) return rows;
+
+  const solid = rows.filter((r) => r.length === maxCols);
+  if (!solid.length) return rows;
+
+  const out = [];
+  for (const row of rows) {
+    if (row.length === maxCols) {
+      out.push(row);
+      continue;
+    }
+
+    const rebuilt = [];
+    for (const cell of row) {
+      const left = cell.x;
+      const right = cell.x + cell.w;
+      const centerTol = Math.max(2, cell.w * 0.05);
+
+      // Solid cells aligned with this cell (x-center inside its span).
+      const aligned = [];
+      for (const srow of solid) {
+        const hits = srow.filter(
+          (b) => centerX(b) >= left - centerTol && centerX(b) <= right + centerTol,
+        );
+        if (hits.length) aligned.push(hits);
+      }
+      if (!aligned.length || aligned.every((hits) => hits.length === 1)) {
+        rebuilt.push({ ...cell });
+        continue;
+      }
+
+      // k = number of columns falsely merged into this cell.
+      const k = Math.max(...aligned.map((hits) => hits.length));
+      if (k < 2) {
+        rebuilt.push({ ...cell });
+        continue;
+      }
+
+      // Split points: for each adjacent column pair, the midpoint between
+      // the left cell's right edge and the right cell's left edge,
+      // median across all solid rows that aligned with this cell.
+      const splitPts = [];
+      for (let c = 1; c < k; c++) {
+        const mids = [];
+        for (const hits of aligned) {
+          if (hits.length < k) continue;
+          const ordered = [...hits].sort((a, b) => a.x - b.x);
+          mids.push((ordered[c - 1].x + ordered[c - 1].w + ordered[c].x) / 2);
+        }
+        if (!mids.length) break;
+        mids.sort((a, b) => a - b);
+        splitPts.push(mids[Math.floor(mids.length / 2)]);
+      }
+      if (splitPts.length !== k - 1) {
+        rebuilt.push({ ...cell });
+        continue;
+      }
+
+      // Split the merged text at the characters corresponding to the split
+      // points. Per-character x is not available, so character centers are
+      // laid out proportionally across the merged box's width; each chunk
+      // is cut at the character whose center is nearest its split point.
+      const text = cell.text;
+      const n = text.length;
+      const charCenter = (i) => left + ((right - left) * (i + 0.5)) / n;
+      const cutIdx = [];
+      for (const p of splitPts) {
+        let best = 0;
+        let bestD = Infinity;
+        for (let i = 0; i < n; i++) {
+          const d = Math.abs(charCenter(i) - p);
+          if (d < bestD) {
+            bestD = d;
+            best = i;
+          }
+        }
+        if (!cutIdx.length || best > cutIdx[cutIdx.length - 1]) {
+          cutIdx.push(best);
+        }
+      }
+      if (cutIdx.length !== splitPts.length) {
+        rebuilt.push({ ...cell });
+        continue;
+      }
+
+      // Slice the cell box at the split points and emit one box per chunk.
+      const bounds = [left, ...splitPts, right];
+      const edges = [0, ...cutIdx, n];
+      for (let c = 0; c < k; c++) {
+        const cx = bounds[c];
+        const cright = bounds[c + 1];
+        const chunk = text.slice(edges[c], edges[c + 1]).trim();
+        if (!chunk) continue;
+        rebuilt.push({
+          ...cell,
+          text: chunk,
+          x: cx,
+          w: cright - cx,
+        });
+      }
+    }
+
+    rebuilt.sort((a, b) => a.x - b.x);
+    out.push(rebuilt);
+  }
+  return out;
 }
 
 function boundsOf(list) {
@@ -297,30 +506,35 @@ export function toNumber(raw) {
  * Returns an array of { rows }, each row being { name, id, conc }.
  */
 export function detectTables(detections) {
-  const rows = clusterRows(detections);
+  let rows = clusterRows(detections);
   console.log("[OCR] Rows", rows);
+  rows = mergeNearbyTexts(rows);
+  rows = filterSampleRows(rows);
+  rows = fixFalseMerges(rows);
+  console.log("[OCR] Final Rows", rows);
   const tables = [];
   let i = 0;
 
   while (i < rows.length) {
-    console.log("[OCR] Row", i);
     const headerCells = buildCells(rows[i]);
     if (!isHeaderRow(headerCells)) {
       i++;
       continue;
     }
-    console.log("[OCR] Header Cells", headerCells);
+    if (globalThis.__DEBUG_OCR__) {
+      console.log("[OCR] Header Cells", headerCells);
+    }
 
-    const columns = resolveColumns(headerCells);
-    if (!columns) {
+    // With rows normalized by fixFalseMerges, every row's cell at the
+    // same index belongs to the same column. Map the relevant columns
+    // (Sample Name / Sample ID / Conc.) straight to header indices.
+    const nameIdx = headerCells.findIndex((c) => isName(c.text));
+    const idIdx = headerCells.findIndex((c) => isId(c.text));
+    const concIdx = headerCells.findIndex((c) => isNum(c.text));
+    if (nameIdx === -1 || idIdx === -1 || concIdx === -1) {
       i++;
       continue;
     }
-    console.log("[OCR] Columns", columns);
-
-    const tableLeft = Math.min(columns.name.x, columns.id.x, columns.conc.x) - columns.tol;
-    const tableRight =
-      Math.max(columns.name.right, columns.id.right, columns.conc.right) + columns.tol;
 
     const table = { rows: [] };
     let j = i + 1;
@@ -330,11 +544,12 @@ export function detectTables(detections) {
       const nextCells = buildCells(rows[j]);
       if (isHeaderRow(nextCells)) break;
 
-      // Keep only cells inside the table span, then map to columns.
-      const bounded = nextCells.filter(
-        (c) => centerX(c) >= tableLeft && centerX(c) <= tableRight,
-      );
-      const rec = rowToRecord(bounded, columns);
+      const cellAt = (idx) => (idx < nextCells.length ? nextCells[idx].text : "");
+      const rec = {
+        name: cellAt(nameIdx),
+        id: cellAt(idIdx),
+        conc: cellAt(concIdx),
+      };
 
       if (rec && rec.id) {
         captured = true;
