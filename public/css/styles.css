@@ -366,6 +366,10 @@ body {
   background: #2a7d54;
 }
 
+.badge.nebule {
+  background: #6b4f9e;
+}
+
 .missing-msg {
   margin: 0 0 12px;
   padding: 10px 12px;

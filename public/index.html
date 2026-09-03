@@ -70,7 +70,6 @@
     <!-- Step 3: results -->
     <section class="card hidden" id="resultsCard">
       <p class="timing hidden" id="timing"></p>
-      <div class="tabs" id="tabs" role="tablist"></div>
       <div class="tab-body" id="tabBody">
         <div class="tab-content" id="tabContent">
           <p class="empty hidden" id="emptyMsg">No data for this batch yet.</p>
@@ -97,9 +96,10 @@
           <!-- Calculations (Flow Rate, Unit, Delivered Dose, Mass table) -->
           <div class="calc-controls hidden" id="calcControls">
             <div class="form-row">
-              <label for="flowRate" class="form-label">Flow Rate (L/min)</label>
-              <input type="number" id="flowRate" class="text-input" min="0" step="any"
-                placeholder="e.g. 60" />
+              <span class="form-label">Flow Rate (L/min)</span>
+              <div class="btn-row flow-row" id="flowRow">
+                <!-- Buttons are filled per dosage form by app.js -->
+              </div>
             </div>
             <div class="form-row">
               <span class="form-label">Unit</span>
@@ -107,6 +107,12 @@
                 <button type="button" class="unit-btn active" data-unit="ug">μg</button>
                 <button type="button" class="unit-btn" data-unit="mg">mg</button>
               </div>
+            </div>
+
+            <!-- Metered Dose -->
+            <div class="result-line">
+              <span class="form-label">Metered Dose</span>
+              <span class="result-value" id="meteredDose"></span>
             </div>
 
             <!-- Delivered Dose -->
@@ -117,7 +123,7 @@
 
             <!-- Flow rate required message -->
             <p class="missing-msg hidden" id="flowMsg">
-              Please enter a flow rate (L/min) to compute the results.
+              Please select a flow rate (L/min) to compute the results.
             </p>
 
             <!-- Stage / mass table -->
@@ -129,7 +135,7 @@
                     <th>Cut-off Diameter</th>
                     <th>Mass</th>
                     <th>Cumulative Mass</th>
-                    <th>Cumulative Mass Percentage</th>
+                    <th>% Cumulative Mass</th>
                   </tr>
                 </thead>
                 <tbody id="massTbody"></tbody>

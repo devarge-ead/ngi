@@ -1,7 +1,7 @@
 /**
  * Single-page orchestration for the Inhaler Result Analyzer.
  * Flow: pick/capture photo -> confirm -> OCR -> table detection ->
- *       batch grouping -> tabbed results with NGI calculations.
+ *       single-series result with NGI calculations.
  *
  * The raw OCR output and detected-table lists are intentionally NOT shown
  * in the UI.
@@ -9,8 +9,8 @@
 import { runOcr, getService } from "./ocr.js";
 import { detectTables } from "./tableParser.js";
 import { buildBatches } from "./batches.js";
-import { normalizeSampleName, detectDosageForm, STAGE_ORDER } from "./samples.js";
-import { buildMassTable, deliveredDose } from "./calculations.js";
+import { detectDosageForm, STAGE_ORDER, FLOW_RATE_OPTIONS, FLOW_RATE_DEFAULTS } from "./samples.js";
+import { buildMassTable, deliveredDose, meteredDose } from "./calculations.js";
 import { calculateFPD } from "./fpd.js";
 import { calculateMMAD } from "./mmad.js";
 import { calculateGSD } from "./gsd.js";
@@ -33,15 +33,14 @@ const els = {
   status: $("#status"),
   timing: $("#timing"),
   message: $("#message"),
-  tabs: $("#tabs"),
-  tabContent: $("#tabContent"),
   emptyMsg: $("#emptyMsg"),
   dosageBadge: $("#dosageBadge"),
   missingMsg: $("#missingMsg"),
   calcControls: $("#calcControls"),
-  flowRate: $("#flowRate"),
+  flowRow: $("#flowRow"),
   unitRow: $("#unitRow"),
   deliveredDose: $("#deliveredDose"),
+  meteredDose: $("#meteredDose"),
   flowMsg: $("#flowMsg"),
   massTableWrap: $("#massTableWrap"),
   massTbody: $("#massTbody"),
@@ -54,9 +53,8 @@ const els = {
   sampleTbody: $("#sampleTable tbody"),
 };
 
-let currentBatches = null; // { [id]: { samples: { canonical: conc } } }
-let currentOrder = [];
-let activeId = null;
+let currentBatches = null; // { series: { samples: { canonical: conc } } }
+let activeId = null; // always the single series key ("series")
 let currentPhotoDataUrl = null;
 // Data URL of the image with every OCR-detected text box painted in a
 // translucent highlight colour (built after each analysis; downloadable only).
@@ -217,16 +215,6 @@ function buildHighlightedImage(img, detections) {
   return canvas.toDataURL("image/png");
 }
 
-/** Turn a raw batch map (OCR names) into canonical sample keys. */
-function toCanonicalSamples(batch) {
-  const out = {};
-  for (const raw of Object.keys(batch || {})) {
-    const canon = normalizeSampleName(raw);
-    out[canon] = batch[raw];
-  }
-  return out;
-}
-
 function formatNum(v, decimals) {
   if (v === null || v === undefined || Number.isNaN(v)) return "—";
   return Number(v).toFixed(decimals);
@@ -286,8 +274,8 @@ els.btnAnalyze.addEventListener("click", async () => {
     const tables = detectTables(detections);
     if (globalThis.__DEBUG_OCR__) console.log("[OCR] detected tables", tables);
 
-    const { batches, order } = buildBatches(tables);
-    if (!order.length) {
+    const { samples } = buildBatches(tables);
+    if (!Object.keys(samples).length) {
       setStatus(null);
       showMessage(
         "No analysis table was recognized. Please check the photo (focus, framing, lighting).",
@@ -297,12 +285,8 @@ els.btnAnalyze.addEventListener("click", async () => {
 
     const t_detect = performance.now();
 
-    currentBatches = {};
-    currentOrder = order;
-    for (const id of order) {
-      currentBatches[id] = { samples: toCanonicalSamples(batches[id]) };
-      perId[id] = { unit: "ug" };
-    }
+    currentBatches = { series: { samples } };
+    perId.series = { unit: "ug" };
 
     // Report only OCR + table/series detection time (not the calculations).
     const detectionMs = Math.round(t_detect - t_start);
@@ -310,9 +294,9 @@ els.btnAnalyze.addEventListener("click", async () => {
     els.timing.textContent = `Analysis completed in ${detectionMs} ms · OCR ${ocrMs} ms`;
     showEl(els.timing, true);
 
-    setStatus("Building batch results…");
+    setStatus("Building results…");
     await nextPaint();
-    renderTabs();
+    renderResults();
     setStatus(null);
   } catch (err) {
     console.error(err);
@@ -324,32 +308,16 @@ els.btnAnalyze.addEventListener("click", async () => {
   }
 });
 
-/** Render one pill tab per Sample ID. */
-function renderTabs() {
-  els.tabs.textContent = "";
-  currentOrder.forEach((id) => {
-    const tab = document.createElement("button");
-    tab.type = "button";
-    tab.className = "tab";
-    tab.dataset.id = id;
-    tab.textContent = id;
-    tab.setAttribute("role", "tab");
-    tab.addEventListener("click", () => setActive(id));
-    els.tabs.appendChild(tab);
-  });
+/** Render the result view for the single series (no tabs). */
+function renderResults() {
   showEl(els.resultsCard, true);
-
-  if (currentOrder.length) setActive(currentOrder[0]);
+  setActive();
 }
 
-/** Show the content for the given Sample ID (dosage form + calculations). */
-function setActive(id) {
-  activeId = id;
-  if (!perId[id]) perId[id] = { unit: "ug" };
-
-  els.tabs.querySelectorAll(".tab").forEach((t) => {
-    t.classList.toggle("active", t.dataset.id === id);
-  });
+/** Show the content for the single series (dosage form + calculations). */
+function setActive() {
+  activeId = "series";
+  if (!perId[activeId]) perId[activeId] = { unit: "ug" };
 
   renderBatch();
 }
@@ -358,13 +326,20 @@ function renderBatch() {
   const { samples } = currentBatches[activeId];
   const dosage = detectDosageForm(samples);
   const unit = perId[activeId].unit;
+  perId[activeId].form = dosage.form; // remembered for edit-triggered re-renders
 
   // Dosage badge / missing warning.
   if (dosage.form !== null) {
     els.dosageBadge.textContent = dosage.form;
     els.dosageBadge.className = `badge ${dosage.form.toLowerCase()}`;
     showEl(els.dosageBadge, true);
-    showEl(els.missingMsg, false);
+    const conflicts = dosage.conflicts ?? [];
+    if (conflicts.length) {
+      els.missingMsg.textContent = `Warning: ${conflicts.join("; ")}`;
+      showEl(els.missingMsg, true);
+    } else {
+      showEl(els.missingMsg, false);
+    }
   } else {
     els.dosageBadge.className = "badge hidden";
     els.missingMsg.textContent = `Missing results: ${dosage.missing.join(", ")}`;
@@ -380,6 +355,28 @@ function renderBatch() {
   els.unitRow.querySelectorAll(".unit-btn").forEach((b) => {
     b.classList.toggle("active", b.dataset.unit === unit);
   });
+
+  // Flow rate choices depend on the detected dosage form; the selected value
+  // is remembered per batch. Unset (or no-longer-valid) selections fall back
+  // to the form's default.
+  els.flowRow.textContent = "";
+  const flowOptions = dosage.form !== null ? FLOW_RATE_OPTIONS[dosage.form] ?? [] : [];
+  if (
+    flowOptions.length &&
+    (perId[activeId].flowRate === undefined ||
+      !flowOptions.includes(perId[activeId].flowRate))
+  ) {
+    perId[activeId].flowRate = FLOW_RATE_DEFAULTS[dosage.form];
+  }
+  for (const rate of flowOptions) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "unit-btn flow-btn";
+    btn.dataset.rate = rate;
+    btn.textContent = formatNum(rate, 1);
+    btn.classList.toggle("active", perId[activeId].flowRate === rate);
+    els.flowRow.appendChild(btn);
+  }
 
   renderSampleTable(samples);
 
@@ -407,16 +404,25 @@ function renderSampleTable(samples) {
     input.type = "number";
     input.className = "cell-input";
     input.step = "any";
-    // Only the analysis samples (stages, mouth/throat, preseparator) are
-    // editable; other OCR rows (if any) stay read-only text.
-    const editable = ["AGIZ", "BOGAZ", "PRESEPARATOR"].includes(name) ||
-      /^STAGE \d+$/.test(name);
+    // Only the analysis samples (stages, mouth/throat, preseparator and the
+    // pre/post-measurement items) are editable; other OCR rows stay
+    // read-only text.
+    const editable = [
+      "VOLUMETRIC", "SPACER", "CIHAZ", "NEBULIZATOR",
+      "AGIZ", "BOGAZ", "PRESEPARATOR", "FILTER",
+    ].includes(name) || /^STAGE \d+$/.test(name);
     input.value = samples[name] === null ? "" : formatNum(samples[name], 3);
     if (!editable) input.disabled = true;
     input.addEventListener("input", () => {
       const v = input.value === "" ? null : Number(input.value);
       samples[name] = Number.isFinite(v) ? v : null;
-      if (editable && currentBatches[activeId]) renderCalculations();
+      if (editable && currentBatches[activeId]) {
+        // A value edit can change the detected dosage form (e.g. removing
+        // PRESEPARATOR); rebuild the batch view in that case.
+        const { form } = detectDosageForm(samples);
+        if (form !== perId[activeId].form) renderBatch();
+        else renderCalculations();
+      }
     });
     tdConc.appendChild(input);
     tr.appendChild(tdConc);
@@ -427,13 +433,14 @@ function renderSampleTable(samples) {
 function renderCalculations() {
   const { samples } = currentBatches[activeId];
   const unit = perId[activeId].unit;
-  const flowRate = Number(els.flowRate.value);
+  const flowRate = perId[activeId].flowRate;
 
   if (!(flowRate > 0)) {
     // No flow rate -> hide the mass table and ask the user for it.
     showEl(els.massTableWrap, false);
     showEl(els.flowMsg, true);
     els.deliveredDose.textContent = "";
+    els.meteredDose.textContent = "";
     return;
   }
 
@@ -445,6 +452,9 @@ function renderCalculations() {
     showEl(els.massTableWrap, false);
     return;
   }
+
+  const metered = meteredDose(samples);
+  els.meteredDose.textContent = `${formatNum(metered, 3)} ${unitLabel(unit)}`;
 
   const dose = deliveredDose(samples);
   els.deliveredDose.textContent = `${formatNum(dose, 3)} ${unitLabel(unit)}`;
@@ -513,9 +523,15 @@ function tdWithVal(text, isLod) {
   return el;
 }
 
-// Flow rate input triggers recalculation.
-els.flowRate.addEventListener("input", () => {
-  if (activeId && currentBatches[activeId]) renderCalculations();
+// Flow rate selection (fixed choices per dosage form) triggers recalculation.
+els.flowRow.addEventListener("click", (e) => {
+  const btn = e.target.closest(".flow-btn");
+  if (!btn || !activeId) return;
+  perId[activeId].flowRate = Number(btn.dataset.rate);
+  els.flowRow.querySelectorAll(".flow-btn").forEach((b) => {
+    b.classList.toggle("active", b === btn);
+  });
+  renderCalculations();
 });
 
 // Unit selection triggers recalculation.

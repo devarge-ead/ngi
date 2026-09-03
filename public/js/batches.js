@@ -1,32 +1,27 @@
 /**
- * Aggregate detected analysis tables into the batch structure used by the
- * UI. Each unique Sample ID becomes a batch whose keys are Sample Names and
- * whose values are concentrations.
+ * Build the single analysis batch from the topmost detected table. The
+ * sample is matched inside the row's full text (any column may carry it);
+ * the value comes from the Conc. column (already parsed by tableParser).
  *
  * Result shape:
- *   { batches, order, duplicates }
- *     batches: { [sampleId]: { [sampleName]: concOrNull } }
- *     order: sample IDs in first-appearance order (tab order)
- *     duplicates: repeated Sample Name entries found while aggregating
+ *   { samples, duplicates }
+ *     samples: { [canonicalSampleName]: concOrNull }
+ *     duplicates: canonical sample names seen in more than one row
  */
-export function buildBatches(tables) {
-  const batches = {};
-  const order = [];
-  const duplicates = [];
+import { findSampleInText } from "./samples.js";
 
-  for (const table of tables) {
-    for (const row of table.rows) {
-      if (!row.id) continue;
-      if (!(row.id in batches)) {
-        batches[row.id] = {};
-        order.push(row.id);
-      }
-      if (row.name in batches[row.id]) {
-        duplicates.push({ id: row.id, name: row.name });
-      }
-      batches[row.id][row.name] = row.conc;
-    }
+export function buildBatches(tables) {
+  const samples = {};
+  const duplicates = [];
+  const table = Array.isArray(tables) ? tables[0] : null;
+  if (!table) return { samples, duplicates };
+
+  for (const row of table.rows) {
+    const canon = findSampleInText(row.name);
+    if (!canon) continue;
+    if (canon in samples) duplicates.push(canon);
+    samples[canon] = row.conc;
   }
 
-  return { batches, order, duplicates };
+  return { samples, duplicates };
 }

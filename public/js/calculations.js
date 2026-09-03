@@ -2,7 +2,7 @@
  * NGI (Next Generation Impactor) calculations for inhaler testing.
  * All formulas follow the specification provided by the user.
  */
-import { STAGE_ORDER } from "./samples.js";
+import { STAGE_ORDER, normalizeSampleName } from "./samples.js";
 
 /**
  * Stage parameters used to derive the cut-off diameter from the flow rate.
@@ -101,26 +101,26 @@ export function cumPctFromProbit(probit) {
 }
 
 /**
- * Mass table (Stage 8 -> Stage 1). Each entry:
+ * Mass table (MOC -> Stage 1). Each entry:
  *   { stage, mass, cumMass, cumPct, cutoff, logCutoff, probit }
- * mass comes straight from OCR concentrations. cumMass accumulates from
- * Stage 8 down to Stage 1 (Stage 1 -> total). cumPct = cumMass/total*100.
+ * The top row is MOC: its mass is Stage 8 + FILTER (Stage 8 alone if FILTER
+ * is absent); the sample list itself is not merged. cumMass accumulates from
+ * MOC down to Stage 1 (Stage 1 -> total incl. FILTER). cumPct = cum/total*100.
  */
 export function buildMassTable(samplesByCanonical, flowRate) {
-  const total = STAGE_ORDER.reduce(
-    (acc, s) => acc + (typeof samplesByCanonical[s] === "number" ? samplesByCanonical[s] : 0),
-    0,
-  );
+  const val = (k) => (typeof samplesByCanonical[k] === "number" ? samplesByCanonical[k] : 0);
+  const filterMass = val("FILTER");
+  const total = STAGE_ORDER.reduce((acc, s) => acc + val(s), 0) + filterMass;
 
   let cum = 0;
   return STAGE_ORDER.map((stage) => {
-    const mass =
-      typeof samplesByCanonical[stage] === "number" ? samplesByCanonical[stage] : 0;
+    // MOC row merges Stage 8 with FILTER; cutoff still uses the stage name.
+    const mass = val(stage) + (stage === "STAGE 8" ? filterMass : 0);
     cum += mass;
     const cutoff = cutoffDiameter(stage, flowRate);
     const cumPct = total > 0 ? (cum / total) * 100 : 0;
     return {
-      stage,
+      stage: stage === "STAGE 8" ? "MOC" : stage,
       mass,
       cumMass: cum,
       cumPct,
@@ -131,12 +131,25 @@ export function buildMassTable(samplesByCanonical, flowRate) {
   });
 }
 
-/** Delivered Dose = sum of all sample concentrations. */
+/** Sum of numeric sample concentrations, optionally excluding canonical keys. */
+function sumSamples(samplesByCanonical, excludeKeys = []) {
+  const excluded = new Set(excludeKeys);
+  return Object.keys(samplesByCanonical).reduce((acc, k) => {
+    const v = samplesByCanonical[k];
+    if (typeof v !== "number") return acc;
+    if (excluded.has(normalizeSampleName(k))) return acc;
+    return acc + v;
+  }, 0);
+}
+
+/** Metered Dose = sum of ALL sample concentrations. */
+export function meteredDose(samplesByCanonical) {
+  return sumSamples(samplesByCanonical);
+}
+
+/** Delivered Dose = sum of all sample concentrations except CIHAZ/NEBULIZATOR. */
 export function deliveredDose(samplesByCanonical) {
-  return Object.keys(samplesByCanonical).reduce(
-    (acc, k) => acc + (typeof samplesByCanonical[k] === "number" ? samplesByCanonical[k] : 0),
-    0,
-  );
+  return sumSamples(samplesByCanonical, ["CIHAZ", "NEBULIZATOR"]);
 }
 
 export { STAGE_PARAMS, normCdf, normSInv };

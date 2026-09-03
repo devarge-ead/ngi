@@ -6,12 +6,9 @@
  * lines) and aligning cells into columns by their header x-ranges.
  */
 
-const HDR_NAME = /name/i;
-const HDR_ID = /id/i;
 const HDR_CONC = /conc/i;
 
 const centerX = (c) => c.x + (c.w ?? (c.right - c.x)) / 2;
-const centerY = (b) => b.y + b.h / 2;
 
 /**
  * Unit orientation vector of a box, pointing from its center to the
@@ -279,7 +276,7 @@ function buildCells(row) {
  * try). The input is not mutated.
  */
 const SAMPLE_NAME_RE =
-  /AGIZ|AĞIZ|MOUTH|BOGAZ|BOĞAZ|THROAT|PRESEP|STAGE\s*_?\s*0?\s*[1-8]/i;
+  /AGIZ|AĞIZ|MOUTH|BOGAZ|BOĞAZ|THROAT|PRESEP|STAGE\s*_?\s*0?\s*[1-8]|VOLUM|SPACER|CIHAZ|DEVICE|NEBUL|FILTER|FILTRE/i;
 
 function rowMatchesSample(row) {
   let text = "";
@@ -299,6 +296,9 @@ export function filterSampleRows(rows) {
 
   const out = [rows[headerIdx]];
   for (let i = headerIdx + 1; i < rows.length; i++) {
+    // A second header row starts another table; only the topmost table is
+    // used, so stop here.
+    if (isHeaderRow(buildCells(rows[i]))) break;
     if (rowMatchesSample(rows[i])) out.push(rows[i]);
   }
   return out;
@@ -427,65 +427,15 @@ export function fixFalseMerges(rows) {
   return out;
 }
 
-function boundsOf(list) {
-  return {
-    x: Math.min(...list.map((c) => c.x)),
-    right: Math.max(...list.map((c) => c.right)),
-  };
-}
-
-/** x-range of cells matching a predicate, else null. */
-function rangeOf(cells, fn) {
-  const hits = cells.filter(fn);
-  return hits.length ? boundsOf(hits) : null;
-}
-
-const isName = (s) => HDR_NAME.test(s);
-const isId = (s) => HDR_ID.test(s);
 const isNum = (s) => HDR_CONC.test(s);
 
-/** Determine whether a row is an analysis header row. */
+/**
+ * Determine whether a row is an analysis header row: it must contain a
+ * Conc. column. The other columns (Title / Sample ID / Sample Name / ...)
+ * are irrelevant; the sample is matched inside any column of data rows.
+ */
 function isHeaderRow(cells) {
-  const has = (fn) => cells.some((c) => fn(c.text));
-  return has(isName) && has(isId) && has(isNum);
-}
-
-/**
- * Resolve the Sample Name / Sample ID / Conc. column x-ranges from a header
- * row. Each header token is matched by a distinct keyword so "Sample Name"
- * is never swallowed by the "Sample ID" range. Returns null if any missing.
- */
-function resolveColumns(cells) {
-  const name = rangeOf(cells, (c) => isName(c.text));
-  const id = rangeOf(cells, (c) => isId(c.text));
-  const conc = rangeOf(cells, (c) => isNum(c.text));
-  if (!name || !id || !conc) return null;
-
-  // Small tolerance so a data cell stays in its own column even with a bit
-  // of OCR jitter, but never wide enough to swallow the neighbour column.
-  const span = Math.max(name.right - name.x, id.right - id.x, conc.right - conc.x);
-  const tol = Math.max(7, span * 0.09);
-  return { name, id, conc, tol };
-}
-/**
- * Assign each data cell to a column only when its center falls inside that
- * column's x-range. Middle/interstitial columns (Ret. Time, Area, plate
- * count) fall outside all three ranges and are ignored.
- */
-function rowToRecord(dataCells, columns) {
-  const rec = { name: "", id: "", conc: "" };
-  const cols = [columns.name, columns.id, columns.conc];
-
-  for (const c of dataCells) {
-    const cxx = centerX(c);
-    const hits = cols.filter(
-      (col) => cxx >= col.x - columns.tol && cxx <= col.right + columns.tol,
-    );
-    if (!hits.length) continue;
-    const key = hits[0] === columns.name ? "name" : hits[0] === columns.id ? "id" : "conc";
-    rec[key] = (rec[key] ? rec[key] + " " : "") + c.text;
-  }
-  return rec;
+  return cells.some((c) => isNum(c.text));
 }
 
 /** Convert a raw concentration string to a number, tolerating commas. */
@@ -502,8 +452,11 @@ export function toNumber(raw) {
 }
 
 /**
- * Convert normalized detections into detected analysis tables.
- * Returns an array of { rows }, each row being { name, id, conc }.
+ * Convert normalized detections into the detected analysis table.
+ * Only the topmost analysis table on the photo is used (a photo is assumed
+ * to hold a single series). Returns an array with at most one { rows },
+ * each row being { name, conc }; `name` carries the row's full text (the
+ * sample may appear in any column), `conc` comes from the Conc. column.
  */
 export function detectTables(detections) {
   let rows = clusterRows(detections);
@@ -512,51 +465,35 @@ export function detectTables(detections) {
   rows = filterSampleRows(rows);
   rows = fixFalseMerges(rows);
   console.log("[OCR] Final Rows", rows);
-  const tables = [];
-  let i = 0;
 
-  while (i < rows.length) {
+  for (let i = 0; i < rows.length; i++) {
     const headerCells = buildCells(rows[i]);
-    if (!isHeaderRow(headerCells)) {
-      i++;
-      continue;
-    }
+    if (!isHeaderRow(headerCells)) continue;
     if (globalThis.__DEBUG_OCR__) {
       console.log("[OCR] Header Cells", headerCells);
     }
 
-    // With rows normalized by fixFalseMerges, every row's cell at the
-    // same index belongs to the same column. Map the relevant columns
-    // (Sample Name / Sample ID / Conc.) straight to header indices.
-    const nameIdx = headerCells.findIndex((c) => isName(c.text));
-    const idIdx = headerCells.findIndex((c) => isId(c.text));
+    // The sample may appear in ANY column (Title / Sample ID / Sample
+    // Name / ...), so each row keeps its full text; batches.js matches the
+    // canonical sample inside it. Only the Conc. column is positional.
     const concIdx = headerCells.findIndex((c) => isNum(c.text));
-    if (nameIdx === -1 || idIdx === -1 || concIdx === -1) {
-      i++;
-      continue;
-    }
+    if (concIdx === -1) continue;
 
     const table = { rows: [] };
-    let j = i + 1;
     let captured = false;
 
-    for (; j < rows.length; j++) {
+    for (let j = i + 1; j < rows.length; j++) {
       const nextCells = buildCells(rows[j]);
       if (isHeaderRow(nextCells)) break;
 
-      const cellAt = (idx) => (idx < nextCells.length ? nextCells[idx].text : "");
-      const rec = {
-        name: cellAt(nameIdx),
-        id: cellAt(idIdx),
-        conc: cellAt(concIdx),
-      };
+      const rowText = nextCells.map((c) => c.text).join(" ").trim();
+      const conc = concIdx < nextCells.length ? nextCells[concIdx].text : "";
 
-      if (rec && rec.id) {
+      if (rowText) {
         captured = true;
         table.rows.push({
-          name: rec.name.trim(),
-          id: rec.id.trim(),
-          conc: toNumber(rec.conc),
+          name: rowText,
+          conc: toNumber(conc),
         });
         continue;
       }
@@ -564,9 +501,8 @@ export function detectTables(detections) {
       // Before any data was captured: still scanning toward the data rows.
     }
 
-    if (table.rows.length) tables.push(table);
-    i = j;
+    return [table]; // topmost table only
   }
 
-  return tables;
+  return [];
 }
