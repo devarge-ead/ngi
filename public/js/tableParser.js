@@ -217,7 +217,7 @@ export function clusterRows(boxes, { maxGap = Infinity } = {}) {
  * right/bottom). Rows are returned in the same shape and order; the
  * input is not mutated.
  */
-const GAP_RATIO = 0.6;
+const GAP_RATIO = 0.45;
 const MIN_MERGE_GAP = 2;
 
 export function mergeNearbyTexts(rows, { gapRatio = GAP_RATIO, minGap = MIN_MERGE_GAP } = {}) {
@@ -276,7 +276,7 @@ function buildCells(row) {
  * try). The input is not mutated.
  */
 const SAMPLE_NAME_RE =
-  /AGIZ|AĞIZ|MOUTH|BOGAZ|BOĞAZ|THROAT|PRESEP|STAGE\s*_?\s*0?\s*[1-8]|VOLUM|SPACER|CIHAZ|DEVICE|NEBUL|FILTER|FILTRE/i;
+  /AGIZ|AĞIZ|MOUTH|BOGAZ|BOĞAZ|THROAT|PRESEP|STAGE\s*_?\s*(?:0?[1-8]|[IVX]+)|VOLUM|SPACER|CIHAZ|DEVICE|NEBUL|FILTER|FILTRE/i;
 
 function rowMatchesSample(row) {
   let text = "";

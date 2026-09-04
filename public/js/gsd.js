@@ -28,10 +28,6 @@ export function calculateGSD({ rows, mmad }) {
 
   const n = fitRows.length;
 
-  if (n < 2) {
-    return { gsd: NA, n, slope: NaN, intercept: NaN, r2: NA };
-  }
-
   const fit = linearFit(
     fitRows.map((r) => r.logCutoff),
     fitRows.map((r) => r.probit),

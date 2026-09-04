@@ -47,7 +47,7 @@ const CANONICAL_TO_ALIASES = {
   AGIZ: ["MOUTH", "AĞIZ", "MOUTHPIECE"],
   BOGAZ: ["THROAT", "BOĞAZ"],
   PRESEPARATOR: ["PRESEPERATOR", "PRESEP", "PRESEP."],
-  "STAGE 1": ["STAGE_1", "STAGE1", "STAGE-1", "STAGE 01", "STAGE-01", "STAGE O1", "STAGE-O1", "STAGE_I", "STAGEI", "STAGE-I", "STAGE 0I", "STAGE-0I", "STAGE OI", "STAGE-OI"],
+  "STAGE 1": ["STAGE_1", "STAGE1", "STAGE-1", "STAGE 01", "STAGE-01", "STAGE O1", "STAGE-O1", "STAGE I", "STAGE_I", "STAGEI", "STAGE-I", "STAGE 0I", "STAGE-0I", "STAGE OI", "STAGE-OI"],
   "STAGE 2": ["STAGE_2", "STAGE2", "STAGE-2", "STAGE 02", "STAGE-02", "STAGE O2", "STAGE-O2"],
   "STAGE 3": ["STAGE_3", "STAGE3", "STAGE-3", "STAGE 03", "STAGE-03", "STAGE O3", "STAGE-O3"],
   "STAGE 4": ["STAGE_4", "STAGE4", "STAGE-4", "STAGE 04", "STAGE-04", "STAGE O4", "STAGE-O4"],
@@ -91,6 +91,29 @@ function normalizeSampleName(name) {
 }
 
 /**
+ * Match "STAGE <n>" in already-cleaned text, where n is a digit (with an
+ * optional leading 0) or a roman numeral (I..VIII, also after a stray 0
+ * such as "STAGE 0I"). Returns "STAGE <n>" or null.
+ */
+export function stageFromText(c) {
+  const m = c.match(/STAGE\s*_?\s*0?(?:([1-8])(?!\d)|([IVX]+))/);
+  if (!m) return null;
+  if (m[1]) return `STAGE ${m[1]}`;
+  // Roman numeral (I, II, ... VIII). Values outside 1..8 (e.g. IX) are
+  // rejected so OCR noise does not create phantom stages.
+  const vals = { I: 1, V: 5, X: 10 };
+  let total = 0;
+  const s = m[2];
+  for (let i = 0; i < s.length; i++) {
+    const v = vals[s[i]];
+    if (!v) return null;
+    const next = vals[s[i + 1]] || 0;
+    total += next > v ? -v : v;
+  }
+  return total >= 1 && total <= 8 ? `STAGE ${total}` : null;
+}
+
+/**
  * Find which canonical sample (or one of its aliases) appears anywhere
  * inside `text` as a substring — the column it appears in does not matter.
  * Longest patterns are tried first so a longer name always wins over a
@@ -102,8 +125,8 @@ function findSampleInText(text) {
   const c = clean(text);
   if (!c) return null;
 
-  const stage = c.match(/STAGE\s*_?\s*0?\s*([1-8])(?!\d)/);
-  if (stage) return `STAGE ${stage[1]}`;
+  const stage = stageFromText(c);
+  if (stage) return stage;
 
   let best = null;
   let bestLen = 0;
