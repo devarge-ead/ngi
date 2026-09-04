@@ -142,14 +142,18 @@ function sumSamples(samplesByCanonical, excludeKeys = []) {
   }, 0);
 }
 
-/** Metered Dose = sum of ALL sample concentrations. */
+/** Metered Dose = sum of ALL sample concentrations (incl. device/spacer). */
 export function meteredDose(samplesByCanonical) {
   return sumSamples(samplesByCanonical);
 }
 
-/** Delivered Dose = sum of all sample concentrations except CIHAZ/NEBULIZATOR. */
+/**
+ * Delivered Dose = sum of all sample concentrations except the device
+ * (CIHAZ/DEVICE) and, if present, the spacer (SPACER) and nebulizer
+ * (NEBULIZATOR).
+ */
 export function deliveredDose(samplesByCanonical) {
-  return sumSamples(samplesByCanonical, ["CIHAZ", "NEBULIZATOR"]);
+  return sumSamples(samplesByCanonical, ["CIHAZ", "SPACER", "NEBULIZATOR"]);
 }
 
 export { STAGE_PARAMS, normCdf, normSInv };

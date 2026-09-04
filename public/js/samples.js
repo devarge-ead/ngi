@@ -29,9 +29,8 @@ const ALL_SAMPLES = ["AGIZ", "BOGAZ", PRESEPARATOR, ...STAGE_ORDER];
 // Every sample we recognize, in the order they appear on the result sheet
 // (pre-measurement items first, stages, then the final filter).
 const SAMPLE_ORDER = [
-  "VOLUMETRIC",
-  "SPACER",
   "CIHAZ",
+  "SPACER",
   "NEBULIZATOR",
   "AGIZ",
   "BOGAZ",
@@ -42,8 +41,7 @@ const SAMPLE_ORDER = [
 
 /** Canonical -> allowed OCR spellings (canonical itself matches implicitly). */
 const CANONICAL_TO_ALIASES = {
-  VOLUMETRIC: ["VOLUMETRIK", "VOLUM", "VOL"],
-  SPACER: ["SPACE"],
+  SPACER: ["SPACE", "VOLUMETRIK", "VOLUMETRIC", "VOLUM", "VOL"],
   CIHAZ: ["DEVICE"],
   NEBULIZATOR: ["NEBUL", "NEBULE", "NEBULIZATER"],
   AGIZ: ["MOUTH", "AĞIZ", "MOUTHPIECE"],
@@ -177,15 +175,14 @@ const FLOW_RATE_OPTIONS = {
 
 /** Flow rate selected by default (L/min) per dosage form. */
 const FLOW_RATE_DEFAULTS = {
-  MDI: 28.3,
+  MDI: 30.0,
   DPI: 100.0,
   Nebule: 15.0,
 };
 
 // Optional sample pairs: at most one of each pair may be present, and their
-// absence is acceptable (VOLUMETRIC/SPACER and CIHAZ/NEBULIZATOR are
-// alternative device/spacer setups, never used together).
+// absence is acceptable (CIHAZ/NEBULIZATOR are alternative device setups,
+// never used together).
 const OPTIONAL_PAIRS = [
-  ["VOLUMETRIC", "SPACER"],
   ["CIHAZ", "NEBULIZATOR"],
 ];

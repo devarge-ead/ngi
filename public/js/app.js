@@ -9,7 +9,7 @@
 import { runOcr, getService } from "./ocr.js";
 import { detectTables } from "./tableParser.js";
 import { buildBatches } from "./batches.js";
-import { detectDosageForm, STAGE_ORDER, FLOW_RATE_OPTIONS, FLOW_RATE_DEFAULTS } from "./samples.js";
+import { detectDosageForm, STAGE_ORDER, SAMPLE_ORDER, FLOW_RATE_OPTIONS, FLOW_RATE_DEFAULTS } from "./samples.js";
 import { buildMassTable, deliveredDose, meteredDose } from "./calculations.js";
 import { calculateFPD } from "./fpd.js";
 import { calculateMMAD } from "./mmad.js";
@@ -388,7 +388,20 @@ function renderBatch() {
 
 function renderSampleTable(samples) {
   els.sampleTbody.textContent = "";
-  const names = Object.keys(samples).sort();
+  // Display order follows SAMPLE_ORDER (Device first, Spacer second, ...);
+  // stages are shown 1 -> 8 in this table (the mass table keeps MOC -> 1);
+  // unknown names go last, alphabetically.
+  const orderIdx = (n) => {
+    if (/^STAGE \d+$/.test(n)) {
+      const num = Number(n.replace(/\D/g, "")) || 1;
+      return SAMPLE_ORDER.indexOf("STAGE 8") + (num - 1);
+    }
+    const i = SAMPLE_ORDER.indexOf(n);
+    return i === -1 ? SAMPLE_ORDER.length : i;
+  };
+  const names = Object.keys(samples).sort(
+    (a, b) => orderIdx(a) - orderIdx(b) || a.localeCompare(b),
+  );
   if (!names.length) {
     showEl(els.emptyMsg, true);
     return;
@@ -408,7 +421,7 @@ function renderSampleTable(samples) {
     // pre/post-measurement items) are editable; other OCR rows stay
     // read-only text.
     const editable = [
-      "VOLUMETRIC", "SPACER", "CIHAZ", "NEBULIZATOR",
+      "SPACER", "CIHAZ", "NEBULIZATOR",
       "AGIZ", "BOGAZ", "PRESEPARATOR", "FILTER",
     ].includes(name) || /^STAGE \d+$/.test(name);
     input.value = samples[name] === null ? "" : formatNum(samples[name], 3);
