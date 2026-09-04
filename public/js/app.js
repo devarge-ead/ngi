@@ -506,7 +506,10 @@ function renderAerodynamicResults(rows, deliveredTotal, unit) {
       deliveredDose: deliveredTotal,
     });
     const tr = document.createElement("tr");
-    tr.appendChild(td(`${formatNum(thr, 2)}`));
+    // The 5.0 μm threshold is the primary result: highlight the whole row
+    // (palette green, as used by the DPI badge).
+    if (thr === 5.0) tr.classList.add("fpd-row-primary");
+    tr.appendChild(td(`≤ ${formatNum(thr, 2)}`));
     tr.appendChild(tdWithVal(res.fpd === "LOD" ? "LOD" : `${formatNum(res.fpd, 3)} ${unitLabel(unit)}`, res.fpd === "LOD"));
     tr.appendChild(tdWithVal(res.fpdPct === "LOD" ? "LOD" : `${formatNum(res.fpdPct, 3)}%`, res.fpdPct === "LOD"));
     els.fpdTbody.appendChild(tr);

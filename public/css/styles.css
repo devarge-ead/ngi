@@ -510,6 +510,13 @@ body {
   font-weight: 700;
 }
 
+/* FPD table: emphasize the primary 5.0 um threshold row (palette green). */
+tr.fpd-row-primary td {
+  background: rgba(42, 125, 84, 0.15);
+  font-weight: 700;
+  color: #2a7d54;
+}
+
 @media (max-width: 560px) {
   .form-label {
     min-width: 100%;
