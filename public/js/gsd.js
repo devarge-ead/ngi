@@ -39,7 +39,7 @@ export function calculateGSD({ rows, mmad }) {
 
   const r2 = n === 2 ? 1 : fit.r2;
 
-  if (r2 === NA || r2 < 0.95) {
+  if (r2 !== NA && r2 < 0.95) {
     return { gsd: NA, n, slope: fit.slope, intercept: fit.intercept, r2 };
   }
 
